@@ -4292,10 +4292,14 @@ $("#codeForm").addEventListener("submit", e => {
 $("#twoFaForm").addEventListener("submit", e => {
   e.preventDefault();
   clearErrs();
+  // فیکس NB-35: تنها فرم بدون گارد busy — دو ضربه‌ی پشت‌سرهم، دو sign_in هم‌زمان می‌فرستاد
+  const btn = $("#twoFaForm button");
+  busy(btn, true);
   api("/api/login/2fa", { password: $("#password").value }).then(r => {
-    if (handleAuth(r, () => $("#twoFaForm").requestSubmit(), $("#twoFaForm button"))) return;
+    busy(btn, false);
+    if (handleAuth(r, () => $("#twoFaForm").requestSubmit(), btn)) return;
     toast((r.data && r.data.error) || "خطا", "err");
-  }).catch(() => toast("ارتباط برقرار نشد", "err"));
+  }).catch(() => { busy(btn, false); toast("ارتباط برقرار نشد", "err"); });   // فیکس NB-35
 });
 
 $("#resendBtn").addEventListener("click", () => {
