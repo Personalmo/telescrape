@@ -3939,7 +3939,7 @@ function showMain() {
         ? "📁 Drive وصل است: \u2066" + (t.base || "") + "\u2069"
         : "📁 Drive وصل نیست — خروجی موقت است؛ لانچر را با \u2066drive=True\u2069 اجرا کنید";
     } else { card.hidden = true; }
-  });
+  }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-34: تنها promise بی‌سرپرست باقی‌مانده (هم‌کلاس NB-32)
   show("main");
   loadList(1);
 }
@@ -4899,6 +4899,7 @@ def _selftest():
 
 if __name__ == "__main__":
     main()
+
 
 
 
