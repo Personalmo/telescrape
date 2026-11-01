@@ -1634,16 +1634,23 @@ def settings_screen(app, client, api_id):
 
 def _login_wait(sec):       # فیکس NB-04: صبرِ FloodWait لاگین — شمارش معکوس + قابل قطع
     """Blocking FloodWait wait that keeps the UI alive: countdown via status(), Ctrl+C aborts."""
+    # فیکس NB-36: این تابع بیرون از حلقه‌ی run() اجرا می‌شود؛ status() فقط صف می‌کند و
+    # تنها رسم‌کننده‌ی صفحه (_ui_tick) در حلقه‌ی run() صدا زده می‌شد — پس شمارش معکوسِ
+    # NB-04 هرگز دیده نمی‌شد. حالا هر تیک همین‌جا رسم می‌شود و در پایان خط پاک می‌شود.
     end = time.time() + max(0.0, sec)
-    while True:
-        left = end - time.time()
-        if left <= 0:
-            return
-        try:
-            time.sleep(min(0.5, left))
-        except KeyboardInterrupt:
-            raise LoginAbort()
-        status(f"⏳ {int(left) + 1}s")
+    try:
+        while True:
+            left = end - time.time()
+            if left <= 0:
+                return
+            try:
+                time.sleep(min(0.5, left))
+            except KeyboardInterrupt:
+                raise LoginAbort()
+            status(f"⏳ {int(left) + 1}s")
+            _ui_tick()          # فیکس NB-36: شمارش واقعاً روی صفحه بیاید
+    finally:
+        _ui_end()              # فیکس NB-36: خط شمارش بعد از پایان/قطع پاک شود
 
 
 def login(client, phone, pwd2fa):
