@@ -1441,6 +1441,11 @@ async def scrape(app, client, item, speed, total_hint=None):
                     if first_id is None:
                         first_id = m.id
                     last_done = last_id = m.id
+                    # فیکس NB-38: متنِ هر پیام باید «قبل از» state.json روی دیسک برود —
+                    # state جلوتر از بافرِ متن نباشد تا در مرگ ناگهانی ران‌تایم، پیام‌های
+                    # «انجام‌شده» در resume بی‌متن نمانند (state منبع حقیقتِ ادامه است).
+                    mf.flush()
+                    md.flush()
                     save_json(state_path, {"last_id": last_id, "first_id": first_id,
                                            "done": done_before + stats["msgs"]})
                     done_n = done_before + stats["msgs"]
@@ -1452,9 +1457,8 @@ async def scrape(app, client, item, speed, total_hint=None):
                     if pct // 25 > PROG.get("milestone", 0) // 25:   # UIUX-02: خبر هر ۲۵٪ برای گزارش زنده‌ی وب
                         PROG["milestone"] = pct
                         notify(f"✅ {pct}% از پیام‌ها دریافت شد")
-                    if stats["msgs"] % 50 == 0:
-                        mf.flush()
-                        md.flush()
+                    # (فیکس NB-38) فلاشِ هر ۵۰ پیامی از این‌جا حذف شد — فلاش حالا برای
+                    # هر پیام، پیش از save_json در بالای همین حلقه انجام می‌شود.
                 await nap(th.batch_pause(), show=False)       # cooldown between fetches
     except Stopped:
         interrupted, reason = True, "stop"
