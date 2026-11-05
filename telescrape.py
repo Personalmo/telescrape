@@ -4266,16 +4266,20 @@ function loadZips(box, card) {
                "<button class='btn ghost' data-mv='" + escapeHtml(z.name) + "' aria-label='انتقال " + escapeHtml(z.name) + " به پوشهٔ مقصد'>📤</button></div>";
       }).join("");
     box.querySelectorAll("[data-mv]").forEach(b =>
-      b.addEventListener("click", () => moveZip(b.dataset.mv, box.querySelector(".mvDest").value)));
+      b.addEventListener("click", () => {
+        busy(b, true, "…");        // فیکس NB-40: گارد busy — دو ضربه، دو انتقال هم‌زمان نمی‌فرستد
+        moveZip(b.dataset.mv, box.querySelector(".mvDest").value, b);
+      }));
     if (card) card.hidden = false;
   }).catch(() => { if (card) card.hidden = true; });
 }
 
 // UIUX-2: انتقال زیپ به پوشهٔ دلخواه Colab/Drive — همه‌چیز از UI
-function moveZip(name, dest) {
+function moveZip(name, dest, btn) {
   dest = (dest || "").trim();
   if (!dest) { toast("پوشهٔ مقصد را وارد کنید", "err"); return; }
   api("/api/zip/move", { name: name, dest: dest }).then(r => {
+    if (btn) busy(btn, false);              // فیکس NB-40: دکمه در هر پاسخی آزاد شود
     if (r.status === 200) {
       localStorage.setItem("ts_mv_dest", dest);
       toast("✅ انتقال شد: \u2066" + (r.data.path || name) + "\u2069", "ok");
@@ -4284,7 +4288,7 @@ function moveZip(name, dest) {
     } else {
       toast((r.data && r.data.error) || "انتقال ناموفق بود", "err");
     }
-  }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-32
+  }).catch(() => { if (btn) busy(btn, false); toast("ارتباط با سرور برقرار نشد", "err"); });   // فیکس NB-32/NB-40
 }
 
 $("#setupForm").addEventListener("submit", e => {
