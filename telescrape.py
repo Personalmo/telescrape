@@ -2149,6 +2149,8 @@ W = {
         # فیکس NB-31: وضعیت restore بکاپ سشن به UI وب برسد (قبلاً فقط say() → web.log)
         "bk_no_pw": "⚠️ رمز بکاپ سشن (سکرت TS_ENC_KEY یا فیلد رمز فرم) موجود نیست؛ بکاپ Drive نادیده گرفته شد و لاگین تازه انجام می‌شود.",
         "bk_restore_fail": "⚠️ بازگردانی بکاپ سشن نشد (رمز غلط یا فایل خراب)؛ لاگین تازه انجام می‌شود. بکاپ حذف نشد.",
+        # فیکس NB-39: get_me بعد از ورودِ موفق شکست خورد ولی سشن authorized است
+        "me_late": "✅ ورود موفق بود؛ نام حساب فعلاً دریافت نشد — با «بازخوانی» بعداً می‌آید.",
     },
     "en": {
         "bad_api_id": "Invalid API ID.",
@@ -2206,6 +2208,8 @@ W = {
         # fix NB-31: session-backup restore status reaches the web UI (was web.log only)
         "bk_no_pw": "⚠️ No session-backup password (Secret TS_ENC_KEY or the form field); the Drive backup was skipped and a fresh login will start.",
         "bk_restore_fail": "⚠️ Session backup could not be restored (wrong password or corrupt file); a fresh login will start. The backup was NOT deleted.",
+        # fix NB-39: get_me failed after a successful sign_in but the session is authorized
+        "me_late": "✅ Login was successful; the account name could not be fetched yet — use “Refresh” later.",
     },
 }
 
@@ -2690,6 +2694,21 @@ def _finish_login():
     try:
         me = _bg_call(ts._get_me(client), 90)
     except Exception as e:
+        # فیکس NB-39: بن‌بست لاگین — بعد از ورودِ موفق (sign_in)، شکستِ get_me
+        # فاز را در need_code/need_2fa نگه نمی‌دارد؛ کاربر با ارسال دوباره‌ی کد به
+        # خطای کد می‌خورد و api_login_start هم early-return می‌کرد → تنها راه
+        # خروج، حذفِ سشنِ سالم بود. حالا اگر سشن واقعاً authorized است، فاز
+        # ready با نامِ جایگزین می‌رود و پیام دوزبانه می‌دهد که نام بعداً می‌آید.
+        try:
+            auth_ok = _client_alive() and _bg_call(client.is_user_authorized(), 30)
+        except Exception:
+            auth_ok = False
+        if auth_ok:
+            with LOCK:
+                STATE["who"] = ""
+                STATE["phase"] = "ready"
+            return jsonify({"phase": "ready", "who": "", "restored": STATE["restored"],
+                            "backup": "backup_off", "note": wt("me_late")})
         return _net_error(e)
     who = " ".join((ts.utils.get_display_name(me) or str(me.id)).split())
     backup = "backup_off"
@@ -3854,7 +3873,7 @@ function countdown(wait, after, btn) {
 function handleAuth(r, retry, btn) {
   const d = r.data || {};
   if (d.wait) { countdown(d.wait, retry, btn); return true; }
-  if (d.phase === "ready") { showMain(); return true; }
+  if (d.phase === "ready") { if (d.note) toast(d.note, "warn"); showMain(); return true; }   // فیکس NB-39: پیام «نام حساب بعداً» به کاربر برسد
   if (d.phase === "need_2fa") { showLogin("need_2fa"); return true; }
   if (d.phase === "need_code") { showLogin("need_code"); return true; }
   if (d.error) {
@@ -4908,12 +4927,70 @@ def _selftest():
         STATE.clear()
         STATE.update(saved)
 
+    # فیکس NB-39: بعد از ورودِ موفق، شکستِ get_me نباید فاز را در need_code/need_2fa
+    # بیندازد (بن‌بست لاگین). سشن authorized → ready با نام جایگزین + پیام دوزبانه؛
+    # سشن unauthorized → همان مسیر خطای قبلی، بدون جعلِ فاز. ts._get_me موقتاً فیک
+    # می‌شود تا retryهای ۲ثانیه‌ای داخل تست اجرا نشوند.
+    class _FakeMeDead:
+        def is_connected(self):
+            return True
+
+        async def get_me(self):
+            raise RuntimeError("net-down")
+
+        async def is_user_authorized(self):
+            return True
+
+        async def iter_dialogs(self):
+            return
+            yield
+
+    class _FakeUnauthorized:
+        def is_connected(self):
+            return True
+
+        async def get_me(self):
+            raise RuntimeError("net-down")
+
+        async def is_user_authorized(self):
+            return False
+
+    async def _gm_boom(c):
+        raise RuntimeError("net-down")
+
+    _orig_gm = ts._get_me
+    ts._get_me = _gm_boom
+    saved2 = dict(STATE)
+    try:
+        STATE["app"] = ts.App()
+        STATE["api_id"] = 1
+        STATE["phase"] = "need_code"
+        with web.app_context():
+            STATE["client"] = _FakeMeDead()      # سشن سالم ولی get_me مرده
+            rv3 = _finish_login()
+            j3 = rv3.get_json()
+            eq(rv3.status_code, 200, "nb39.ok_status")
+            eq(j3.get("phase"), "ready", "nb39.ok_phase")
+            eq(STATE["phase"], "ready", "nb39.ok_state")
+            eq(STATE["who"], "", "nb39.ok_who")
+            eq(bool(j3.get("note")), True, "nb39.ok_note")
+            STATE["phase"] = "need_code"
+            STATE["client"] = _FakeUnauthorized()  # سشن واقعاً unauthorized → مسیر خطای قبلی
+            rv4 = _finish_login()
+            eq(rv4[1], 500, "nb39.dead_status")            # خروجی _net_error تاپل (Response, status) است
+            eq(STATE["phase"], "need_code", "nb39.dead_phase")   # فاز دست‌نخورده — readyنشدنِ بی‌مجاز
+    finally:
+        ts._get_me = _orig_gm
+        STATE.clear()
+        STATE.update(saved2)
+
     print(f"self-test: {ok} passed, {fail} failed")
     raise SystemExit(1 if fail else 0)
 
 
 if __name__ == "__main__":
     main()
+
 
 
 
