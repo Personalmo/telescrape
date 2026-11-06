@@ -2073,6 +2073,9 @@ ts._ensure("flask")                     # پیش‌نصبِ Colab؛ همان ا�
 from flask import Flask, jsonify, request, send_file
 
 # قابلیت WEB-01: خروجی وب باید روی Drive بماند — پیش‌فرضِ False موتور override می‌شود
+# فیکس NB-42: پیش‌فرضِ فرمِ موتور پیش از override ذخره می‌شود تا --cli (که این
+# override را به ارث نمی‌برد) بتواند به رفتار مستندِ خودش برگردد
+ts._USE_DRIVE_ENGINE = ts.USE_DRIVE
 ts.USE_DRIVE = True
 
 
@@ -2625,6 +2628,11 @@ def main():
         fn()
         return
     if "--cli" in sys.argv:                      # حالت ترمینال کامل موتور
+        # فیکس NB-42: override وبِ USE_DRIVE=True فقط برای سرور وب است؛ CLI در Colab
+        # نباید بی‌خواه drive.mount کند (در پروسه‌ی جدا شکست می‌خورد و پیام خطای
+        # گمراه‌کننده می‌داد) یا اگر Drive از قبل ماونت است، بی‌صدا خروجی را روی
+        # Drive بگذارد — برگشت به پیش‌فرضِ فرمِ موتور.
+        ts.USE_DRIVE = getattr(ts, "_USE_DRIVE_ENGINE", ts.USE_DRIVE)
         cli_main()
         return
     args = _parse_args()
