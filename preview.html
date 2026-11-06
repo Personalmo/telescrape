@@ -596,7 +596,7 @@ function countdown(wait, after, btn) {
 function handleAuth(r, retry, btn) {
   const d = r.data || {};
   if (d.wait) { countdown(d.wait, retry, btn); return true; }
-  if (d.phase === "ready") { showMain(); return true; }
+  if (d.phase === "ready") { if (d.note) toast(d.note, "warn"); showMain(); return true; }   // فیکس NB-39: پیام «نام حساب بعداً» به کاربر برسد
   if (d.phase === "need_2fa") { showLogin("need_2fa"); return true; }
   if (d.phase === "need_code") { showLogin("need_code"); return true; }
   if (d.error) {
@@ -614,6 +614,8 @@ function boot() {
     const sec = (r.data && r.data.secrets) || {};
     SECRETS = sec;                       // فیکس WB-07: بعد از بوت در دسترس showLogin
     SEC_HINT = (r.data && r.data.hint) || "";
+    const bkMsg = (r.data && r.data.bk_msg) || "";   // فیکس NB-31: علت نشدن restore بکاپ
+    if (bkMsg) toast(bkMsg, "warn");
     if (p === "ready") showMain();
     else if (p === "need_code" || p === "need_2fa") showLogin(p);
     else showSetup(sec, p === "need_login");
@@ -682,14 +684,15 @@ function showMain() {
       card.hidden = false;
       $("#mAccName").textContent = "👤 " + (t.who || "—");
       $("#mAccPhone").textContent = t.phone ? "📞 \u2066" + t.phone + "\u2069" : "";
-      $("#mAccSess").textContent = t.restored
+      $("#mAccSess").textContent = (t.restored
         ? "🔐 سشن از بکاپ Drive بازیابی شده"
-        : (t.bk_active ? "🔐 بکاپ سشن روی Drive فعال" : "🔐 بدون بکاپ سشن");
+        : (t.bk_active ? "🔐 بکاپ سشن روی Drive فعال" : "🔐 بدون بکاپ سشن"))
+        + (t.bk_msg ? "\n" + t.bk_msg : "");   // فیکس NB-31
       $("#mAccDrive").textContent = t.drive
         ? "📁 Drive وصل است: \u2066" + (t.base || "") + "\u2069"
         : "📁 Drive وصل نیست — خروجی موقت است؛ لانچر را با \u2066drive=True\u2069 اجرا کنید";
     } else { card.hidden = true; }
-  });
+  }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-34: تنها promise بی‌سرپرست باقی‌مانده (هم‌کلاس NB-32)
   show("main");
   loadList(1);
 }
@@ -759,7 +762,7 @@ function openChat(id) {
     $("#startBtn").dataset.id = d.id;
     const dlg = $("#chatDlg");
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
-  });
+  }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-32
 }
 
 let pollTimer = null;
@@ -781,6 +784,10 @@ function showProgress() {
   const stale = $("#pollRetryBtn");             // فیکس WB-12: دکمه‌ی تلاش دوباره‌ی مانده
   if (stale) stale.remove();
   pollErrs = 0;
+  // فیکس NB-25: آمار اسکرپ قبلی (ساعت/ETA/شمارنده‌ها) به اسکرپ تازه نشت نکند
+  srvNow = 0; jobStart = 0; lastDone = 0; lastTotal = 0;
+  $("#etaTxt").textContent = "";
+  $("#stTime").textContent = fmtDur(0);
   if (tickTimer) clearInterval(tickTimer);
   tickTimer = setInterval(() => { if (srvNow) { srvNow += 1; tickUpd(); } }, 1000);
   pollTimer = setInterval(poll, 1500);
@@ -885,6 +892,13 @@ function poll() {
       if (job.done) {
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+        /* فیکس NB-29: خطای job (نتیجه‌ی None) دیگر بی‌صدا قورت نمی‌خورد —
+           کاربر پیام خطا را می‌بیند، نه بازگشتِ خاموش به لیست چت‌ها */
+        if (!job.result && job.error) {
+          toast(job.error, "err");
+          showMain();
+          return;
+        }
         showResult(job.result, job);
       }
     } else if (d.result) {
@@ -975,16 +989,22 @@ function loadZips(box, card) {
                "<button class='btn ghost' data-mv='" + escapeHtml(z.name) + "' aria-label='انتقال " + escapeHtml(z.name) + " به پوشهٔ مقصد'>📤</button></div>";
       }).join("");
     box.querySelectorAll("[data-mv]").forEach(b =>
-      b.addEventListener("click", () => moveZip(b.dataset.mv, box.querySelector(".mvDest").value)));
+      b.addEventListener("click", () => {
+        busy(b, true, "…");        // فیکس NB-40: گارد busy — دو ضربه، دو انتقال هم‌زمان نمی‌فرستد
+        moveZip(b.dataset.mv, box.querySelector(".mvDest").value, b);
+      }));
     if (card) card.hidden = false;
   }).catch(() => { if (card) card.hidden = true; });
 }
 
 // UIUX-2: انتقال زیپ به پوشهٔ دلخواه Colab/Drive — همه‌چیز از UI
-function moveZip(name, dest) {
+function moveZip(name, dest, btn) {
   dest = (dest || "").trim();
-  if (!dest) { toast("پوشهٔ مقصد را وارد کنید", "err"); return; }
+  // فیکس NB-41: مسیر خالی هم دکمهٔ قفل‌شده را آزاد کند — return زودهنگام قبلی
+  // busy(false) را نمی‌دید و دکمهٔ 📤 برای همیشه روی «…» قفل می‌ماند
+  if (!dest) { if (btn) busy(btn, false); toast("پوشهٔ مقصد را وارد کنید", "err"); return; }
   api("/api/zip/move", { name: name, dest: dest }).then(r => {
+    if (btn) busy(btn, false);              // فیکس NB-40: دکمه در هر پاسخی آزاد شود
     if (r.status === 200) {
       localStorage.setItem("ts_mv_dest", dest);
       toast("✅ انتقال شد: \u2066" + (r.data.path || name) + "\u2069", "ok");
@@ -993,7 +1013,7 @@ function moveZip(name, dest) {
     } else {
       toast((r.data && r.data.error) || "انتقال ناموفق بود", "err");
     }
-  });
+  }).catch(() => { if (btn) busy(btn, false); toast("ارتباط با سرور برقرار نشد", "err"); });   // فیکس NB-32/NB-40
 }
 
 $("#setupForm").addEventListener("submit", e => {
@@ -1031,10 +1051,14 @@ $("#codeForm").addEventListener("submit", e => {
 $("#twoFaForm").addEventListener("submit", e => {
   e.preventDefault();
   clearErrs();
+  // فیکس NB-35: تنها فرم بدون گارد busy — دو ضربه‌ی پشت‌سرهم، دو sign_in هم‌زمان می‌فرستاد
+  const btn = $("#twoFaForm button");
+  busy(btn, true);
   api("/api/login/2fa", { password: $("#password").value }).then(r => {
-    if (handleAuth(r, () => $("#twoFaForm").requestSubmit(), $("#twoFaForm button"))) return;
+    busy(btn, false);
+    if (handleAuth(r, () => $("#twoFaForm").requestSubmit(), btn)) return;
     toast((r.data && r.data.error) || "خطا", "err");
-  }).catch(() => toast("ارتباط برقرار نشد", "err"));
+  }).catch(() => { busy(btn, false); toast("ارتباط برقرار نشد", "err"); });   // فیکس NB-35
 });
 
 $("#resendBtn").addEventListener("click", () => {
@@ -1071,7 +1095,7 @@ $("#resolveForm").addEventListener("submit", e => {
   api("/api/resolve", { text: norm(txt) }).then(r => {
     if (r.status === 200 && r.data.item) { openChat(r.data.item.id); $("#resolveInput").value = ""; }
     else setErr("resolve", (r.data && r.data.error) || "پیدا نشد");
-  });
+  }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-32
 });
 
 $("#startBtn").addEventListener("click", () => {
@@ -1083,7 +1107,7 @@ $("#startBtn").addEventListener("click", () => {
     busy(btn, false);
     if (r.status === 200 && r.data.ok) { $("#chatDlg").close(); showProgress(); return; }
     toast((r.data && r.data.error) || "شروع نشد", "err");
-  });
+  }).catch(() => { busy(btn, false); toast("ارتباط با سرور برقرار نشد", "err"); });   // فیکس NB-32
 });
 $("#dlgClose").addEventListener("click", () => $("#chatDlg").close());
 
@@ -1093,7 +1117,7 @@ $("#stopBtn").addEventListener("click", () => {
              "بله، متوقف کن", () => {
     api("/api/stop").then(r => {
       if (r.data && r.data.ok) { $("#stopBtn").disabled = true; $("#phaseNote").textContent = "در حال توقف…"; }
-    });
+    }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-32
   });
 });
 
@@ -1189,7 +1213,7 @@ $("#setForm").addEventListener("submit", e => {
     if (r.status === 200) { toast("تنظیمات ذخیره شد", "ok"); showMain(); }
     else if (r.data && r.data.field === "max_mb") setErr("max", r.data.error);
     else toast((r.data && r.data.error) || "ذخیره نشد", "err");
-  });
+  }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-32
 });
 
 // UIUX-04: دیالوگ تأیید عمومی — هم برای خروج، هم برای توقف اسکرپ
@@ -1207,7 +1231,7 @@ $("#logoutBtn").addEventListener("click", () => {
     api("/api/logout").then(r => {
       if (r.data && r.data.msg) toast(r.data.msg, "ok");
       boot();
-    });
+    }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-32
   });
 });
 $("#confirmNo").addEventListener("click", () => $("#confirmDlg").close());
