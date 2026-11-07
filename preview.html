@@ -752,6 +752,11 @@ function escapeHtml(s) {
     c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
 
+// فیکس NB-44: بستن دیالوگ هم مثل باز کردنش گارد داشته باشد — در مرورگر بدون
+// پشتیبانی showModal که fallback باز کردن فعال می‌شود، متد close هم وجود ندارد؛
+// بدون این گارد، TypeError دیالوگ را برای همیشه باز نگه می‌داشت.
+function dlgClose(d) { if (d.close) d.close(); else d.removeAttribute("open"); }
+
 function openChat(id) {
   api("/api/chat/" + id).then(r => {
     const d = r.data || {};
@@ -1105,11 +1110,11 @@ $("#startBtn").addEventListener("click", () => {
   busy(btn, true);
   api("/api/start", { id: parseInt(norm(id), 10) }).then(r => {
     busy(btn, false);
-    if (r.status === 200 && r.data.ok) { $("#chatDlg").close(); showProgress(); return; }
+    if (r.status === 200 && r.data.ok) { dlgClose($("#chatDlg")); showProgress(); return; }
     toast((r.data && r.data.error) || "شروع نشد", "err");
   }).catch(() => { busy(btn, false); toast("ارتباط با سرور برقرار نشد", "err"); });   // فیکس NB-32
 });
-$("#dlgClose").addEventListener("click", () => $("#chatDlg").close());
+$("#dlgClose").addEventListener("click", () => dlgClose($("#chatDlg")));
 
 // UIUX-04: توقف با تأیید — ضربه‌ی ناخواسته روی گوشی نصف اسکرپ را نمی‌کشد
 $("#stopBtn").addEventListener("click", () => {
@@ -1234,9 +1239,9 @@ $("#logoutBtn").addEventListener("click", () => {
     }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-32
   });
 });
-$("#confirmNo").addEventListener("click", () => $("#confirmDlg").close());
+$("#confirmNo").addEventListener("click", () => dlgClose($("#confirmDlg")));
 $("#confirmYes").addEventListener("click", () => {
-  $("#confirmDlg").close();
+  dlgClose($("#confirmDlg"));
   const act = confirmAct; confirmAct = null;
   if (act) act();
 });
