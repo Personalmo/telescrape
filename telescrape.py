@@ -2106,6 +2106,7 @@ W = {
         "invalid_code": "کد نامعتبر است.",
         "code_expired_resent": "کد منقضی شده بود؛ کد جدید ارسال شد.",
         "resent": "کد جدید ارسال شد.",
+        "resend_fail": "ارسال دوباره‌ی کد ناموفق بود؛ کمی بعد دکمه‌ی «ارسال دوباره‌ی کد» را بزنید.",   # فیکس NB-46
         "need_password": "رمز دو مرحله‌ای لازم است.",
         "wrong_password": "رمز اشتباه است.",
         "not_ready": "اول وارد حساب شوید.",
@@ -2165,6 +2166,7 @@ W = {
         "invalid_code": "Invalid code.",
         "code_expired_resent": "The code had expired; a new one was sent.",
         "resent": "New code sent.",
+        "resend_fail": "Resending the code failed; press \"Resend code\" again shortly.",   # فیکس NB-46
         "need_password": "The 2FA password is required.",
         "wrong_password": "Wrong password.",
         "not_ready": "Log in first.",
@@ -2865,8 +2867,8 @@ def api_login_code():
             return jsonify({"error": wt("code_expired_resent"), "field": "code"}), 400
         except ts.FloodWaitError as e:
             return jsonify({"wait": int(e.seconds) + 2})
-        except Exception:
-            return jsonify({"error": wt("invalid_code"), "field": "code"}), 400
+        except Exception:   # فیکس NB-46: شکست resend ≠ کد نامعتبر — پیام درست
+            return jsonify({"error": wt("resend_fail"), "field": "code"}), 400
     except ts.FloodWaitError as e:
         return jsonify({"wait": int(e.seconds) + 2})
     except Exception as e:
@@ -4149,7 +4151,13 @@ function poll() {
       logLine(txt, imp);
       if (imp) toast(txt, "warn");
     });
-    if (typeof d.last_seq === "number") lastSeq = Math.max(lastSeq, d.last_seq);
+    // فیکس NB-45: بعد از ریستارت سرور، بافر seq از صفر شروع می‌شود؛ اگر last_seq
+    // کوچک‌تر از lastSeq محلی بود یعنی بافر ریست شده — lastSeq را صفر کن تا
+    // «گزارش زنده» بعد از ریستارت هم کار کند (بدون رفرش صفحه).
+    if (typeof d.last_seq === "number") {
+      if (d.last_seq < lastSeq) lastSeq = 0;
+      lastSeq = Math.max(lastSeq, d.last_seq);
+    }
     if (typeof d.now === "number" && d.now > srvNow) srvNow = d.now;   // UIUX-03
     const job = d.job;
     if (job) {

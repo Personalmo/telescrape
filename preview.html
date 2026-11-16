@@ -864,7 +864,13 @@ function poll() {
       logLine(txt, imp);
       if (imp) toast(txt, "warn");
     });
-    if (typeof d.last_seq === "number") lastSeq = Math.max(lastSeq, d.last_seq);
+    // فیکس NB-45: بعد از ریستارت سرور، بافر seq از صفر شروع می‌شود؛ اگر last_seq
+    // کوچک‌تر از lastSeq محلی بود یعنی بافر ریست شده — lastSeq را صفر کن تا
+    // «گزارش زنده» بعد از ریستارت هم کار کند (بدون رفرش صفحه).
+    if (typeof d.last_seq === "number") {
+      if (d.last_seq < lastSeq) lastSeq = 0;
+      lastSeq = Math.max(lastSeq, d.last_seq);
+    }
     if (typeof d.now === "number" && d.now > srvNow) srvNow = d.now;   // UIUX-03
     const job = d.job;
     if (job) {
