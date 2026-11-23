@@ -4362,7 +4362,7 @@ $("#twoFaForm").addEventListener("submit", e => {
 $("#resendBtn").addEventListener("click", () => {
   const btn = $("#resendBtn");
   busy(btn, true, "…");
-  api("/api/login/resend").then(r => {
+  api("/api/login/resend", {}).then(r => {   // فیکس NB-49: بدنهٔ خالی یعنی POST — بدون آن GET می‌رفت و 405 می‌گرفت
     busy(btn, false);
     if (r.data && r.data.wait) { countdown(r.data.wait); return; }
     if (r.data && r.data.msg) toast(r.data.msg, "ok");
@@ -4413,7 +4413,7 @@ $("#dlgClose").addEventListener("click", () => dlgClose($("#chatDlg")));
 $("#stopBtn").addEventListener("click", () => {
   askConfirm("توقف اسکرپ؟ فایل‌های دانلودشده حفظ می‌شوند و دفعه‌ی بعد از همین‌جا ادامه می‌یابد.",
              "بله، متوقف کن", () => {
-    api("/api/stop").then(r => {
+    api("/api/stop", {}).then(r => {   // فیکس NB-49: POST — بدون بدنه، api() درخواست را GET می‌فرستد
       if (r.data && r.data.ok) { $("#stopBtn").disabled = true; $("#phaseNote").textContent = "در حال توقف…"; }
     }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-32
   });
@@ -4526,7 +4526,7 @@ function askConfirm(msg, yesLabel, act) {
 $("#logoutBtn").addEventListener("click", () => {
   askConfirm("خروج کامل: سشن محلی و بکاپ Drive هر دو حذف می‌شوند. مطمئنید؟",
              "بله، خارج شو", () => {
-    api("/api/logout").then(r => {
+    api("/api/logout", {}).then(r => {   // فیکس NB-49: POST — بدون بدنه، api() درخواست را GET می‌فرستد
       if (r.data && r.data.msg) toast(r.data.msg, "ok");
       boot();
     }).catch(() => toast("ارتباط با سرور برقرار نشد", "err"));   // فیکس NB-32
@@ -5017,6 +5017,7 @@ def _selftest():
 
 if __name__ == "__main__":
     main()
+
 
 
 
