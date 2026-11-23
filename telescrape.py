@@ -2154,6 +2154,7 @@ W = {
         "bk_no_pw": "⚠️ رمز بکاپ سشن (سکرت TS_ENC_KEY یا فیلد رمز فرم) موجود نیست؛ بکاپ Drive نادیده گرفته شد و لاگین تازه انجام می‌شود.",
         "bk_no_pw_create": "ℹ️ بکاپ سشن فعال است ولی رمزی (سکرت TS_ENC_KEY یا فیلد رمز فرم) موجود نیست؛ بکاپ session ساخته نشد.",   # فیکس NB-47
         "bk_restore_fail": "⚠️ بازگردانی بکاپ سشن نشد (رمز غلط یا فایل خراب)؛ لاگین تازه انجام می‌شود. بکاپ حذف نشد.",
+        "bk_create_fail": "⚠️ ساخت بکاپ سشن ناموفق بود ({e})؛ بدون بکاپ ادامه می‌دهیم. لاگین سالم است.",   # فیکس NB-48
         # فیکس NB-39: get_me بعد از ورودِ موفق شکست خورد ولی سشن authorized است
         "me_late": "✅ ورود موفق بود؛ نام حساب فعلاً دریافت نشد — با «بازخوانی» بعداً می‌آید.",
     },
@@ -2215,6 +2216,7 @@ W = {
         "bk_no_pw": "⚠️ No session-backup password (Secret TS_ENC_KEY or the form field); the Drive backup was skipped and a fresh login will start.",
         "bk_no_pw_create": "ℹ️ Session backup is enabled but no password exists (Secret TS_ENC_KEY or the form field); the session backup was NOT created.",   # fix NB-47
         "bk_restore_fail": "⚠️ Session backup could not be restored (wrong password or corrupt file); a fresh login will start. The backup was NOT deleted.",
+        "bk_create_fail": "⚠️ Session backup could not be created ({e}); continuing without a backup. The login itself is fine.",   # fix NB-48
         # fix NB-39: get_me failed after a successful sign_in but the session is authorized
         "me_late": "✅ Login was successful; the account name could not be fetched yet — use “Refresh” later.",
     },
@@ -2727,9 +2729,17 @@ def _finish_login():
     if _bk_active() and not STATE["restored"]:
         app = STATE["app"]
         pw = ts.get_secret("enc_key") or STATE["enc_pw"]
-        if pw and ts.make_session_backup(app.session_path(STATE["api_id"]) + ".session",
-                                         app.backup_path(STATE["api_id"]), pw):
-            backup = "backup_ok"
+        if pw:
+            # فیکس NB-48: make_session_backup بدون گارد بود؛ شکستش (دیسک پر/Drive) وسط
+            # مسیر لاگین 500 می‌داد و فاز دست‌نخورده در need_code می‌ماند. حالا خطا گرفته
+            # و از طریق bk_msg به UX می‌رسد؛ ورود اصلی آسیب نمی‌بیند.
+            try:
+                if ts.make_session_backup(app.session_path(STATE["api_id"]) + ".session",
+                                          app.backup_path(STATE["api_id"]), pw):
+                    backup = "backup_ok"
+            except Exception as e:
+                with LOCK:
+                    STATE["bk_msg"] = wt("bk_create_fail", e=ts.short_err(e))
         elif not pw:
             # فیکس NB-47: نبودِ رمز به‌صورت بی‌صدا بکاپ را رد می‌کرد در حالی که UI
             # «بکاپ سشن روی Drive فعال» نشان می‌داد؛ کاربر باید بداند بکاپی ساخته نشد.
