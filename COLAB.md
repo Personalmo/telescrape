@@ -25,16 +25,14 @@
 ### سلول ۱ — دانلود موتور + تست خودکار
 
 ```python
-!rm -f telescrape.py telescrape.py.*
-!wget -q -O telescrape.py "https://raw.githubusercontent.com/Personalmo/telescrape/main/telescrape.py?t=$(date +%s)"
-!python telescrape.py --selftest
+!set -e; rm -f telescrape.py telescrape.py.*; curl -fsSL "https://raw.githubusercontent.com/Personalmo/telescrape/main/telescrape.py?t=$(date +%s)" -o telescrape.py && python telescrape.py --selftest
 ```
 
 ✅ **انتظار:** دو خط `self-test: 51 passed, 0 failed` (موتور) و `self-test: 81 passed, 0 failed` (وب). اگر `failed` صفر نبود، قبل از ادامه همان خطا را گزارش کنید.
 
 > عدد موتور به کتابخانهٔ `cryptography` وابسته است: اگر نصب نشد (نادر)، موتور `37 passed` می‌دهد و **خطا نیست** — ۱۴ تستِ بکاپ سشن فقط با آن کتابخانه اجرا می‌شوند.
 
-> چرا `rm` و `-O`: بدون آنها، `wget -q` اگر `telescrape.py` قدیمی باشد نسخه‌ی تازه را بی‌صدا در `telescrape.py.1` می‌ریزد (فیکس NB-21) و `?t=` کش ۵دقیقه‌ای GitHub را دور می‌زند.
+> چرا همین یک خط: `set -e` و `curl -fsSL` یعنی اگر دانلود شکست بخورد (فایل ۰بایتی/ناقص)، سلول همان‌جا متوقف می‌شود و بی‌صدا به تستِ خودکار نمی‌رود (فیکس NB-51)؛ `rm -f` فایل‌های قدیمیِ `telescrape.py.1` را رد می‌کند (فیکس NB-21) و `?t=` کش ۵دقیقه‌ای GitHub را دور می‌زند.
 
 ### سلول ۲ب — سرور + لینک عمومی موبایل (سکرت APP_TOKEN الزامی)
 
@@ -174,7 +172,7 @@ subprocess.run(["pkill", "-f", r"[c]loudflared"])
 - **تونل لینک نداد** (`⛔ تونل cloudflared …`): لانچر را دوباره اجرا کنید؛ اگر تکرار شد به جایگزین‌های بالا بروید و پیام خطا را گزارش کنید.
 - **سکرت خوانده نمی‌شود**: خروجی سلول لانچر علتِ هر سکرت را می‌گوید — «ساخته نشده» (اسم را با جدول بالا مقایسه کنید) / «Notebook access خاموش است» (در 🔑 Secrets برای **همین نوت‌بوک** روشنش کنید؛ نوت‌بوک تازه یا کپی‌شده خاموش شروع می‌شود) / «timeout» (سلول را دوباره اجرا کنید).
 - **صفحه می‌گوید «سرور بدون لانچر اجرا شده»**: سرور را با `!python telescrape.py` اجرا کرده‌اید؛ سلول لانچر را اجرا کنید.
-- **بعد از آپدیت ریپو همان رفتار قبلی می‌ماند**: سلول ۱ را کامل (با `rm` و `-O`) اجرا کنید؛ `ls telescrape.py*` نباید فایل `.1` نشان بدهد.
+- **بعد از آپدیت ریپو همان رفتار قبلی می‌ماند**: سلول ۱ (همین یک خط با `set -e` و `curl -fsSL` — فیکس NB-51) را دوباره اجرا کنید؛ `ls telescrape.py*` نباید فایل `.1` نشان بدهد.
 - **لیست چت‌ها نمی‌آید**: آخر web.log را بفرستید: `print(open('web.log').read()[-2000:])`
 - **«Drive وصل نیست» / خروجی روی Drive نمی‌رود**: لانچر را با `colab_launch(drive=True)` دوباره اجرا کنید؛ راهنمای دقیق در کارت «Google Drive و خروجی» در تنظیمات (⚙️) است.
 - **انتقال زیپ خطا داد («مسیر مقصد نامعتبر»)**: مسیر را مطلق بدهید و در Colab فقط داخل `/content` — مثلاً `/content/drive/MyDrive/TeleScrape/zips`.
