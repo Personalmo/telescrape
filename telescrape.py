@@ -3,10 +3,9 @@
 """
 TeleScrape — یک فایل، همه‌ی TeleScrape: موتور + لایه‌ی وبِ موبایل‌پسند (هم‌نام ریپو)
 
-اجرا در Colab (جزئیات کامل در COLAB.md):
-    !rm -f telescrape.py telescrape.py.*
-    !wget -q -O telescrape.py "https://raw.githubusercontent.com/Personalmo/telescrape/main/telescrape.py?t=$(date +%s)"
-    !python telescrape.py --selftest
+اجرا در Colab (جزئیات کامل در COLAB.md) — فیکس NB-50/NB-51: دانلود و تست در یک خط تا
+    دانلودِ شکست (فایلِ ۰بایتی/ناقص) هرگز بی‌صدا به تستِ خودکار نرود:
+    !set -e; rm -f telescrape.py telescrape.py.*; curl -fsSL "https://raw.githubusercontent.com/Personalmo/telescrape/main/telescrape.py?t=$(date +%s)" -o telescrape.py && python telescrape.py --selftest
 سپس (فیکس NB-21) در یک سلول پایتون:
     import sys; sys.modules.pop("telescrape", None)
     import telescrape; telescrape.colab_launch()
